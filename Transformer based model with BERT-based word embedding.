@@ -1,0 +1,76 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from transformers import BertTokenizer, TFBertModel
+import tensorflow as tf
+from tensorflow.keras.utils import plot_model
+
+# Load the dataset
+data = pd.read_csv('/content/customer_review.csv')
+# Split the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(data['text'], data['label'], test_size=0.2, random_state=42)
+
+# Encode the labels
+label_encoder = LabelEncoder()
+y_train = label_encoder.fit_transform(y_train)
+y_test = label_encoder.transform(y_test)
+
+# Load the BERT tokenizer
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+
+# Tokenize the text and determine the maximum sequence length
+X_train_encodings = tokenizer(X_train.tolist(), truncation=True, padding=True)
+X_test_encodings = tokenizer(X_test.tolist(), truncation=True, padding=True)
+max_length = max(max(len(x) for x in X_train_encodings['input_ids']), max(len(x) for x in X_test_encodings['input_ids']))
+
+# Re-tokenize with adjusted max_length
+X_train_encodings = tokenizer(X_train.tolist(), truncation=True, padding=True, max_length=max_length)
+X_test_encodings = tokenizer(X_test.tolist(), truncation=True, padding=True, max_length=max_length)
+
+# Create TensorFlow datasets
+train_dataset = tf.data.Dataset.from_tensor_slices((
+    {
+        'input_1': X_train_encodings['input_ids'],
+        'input_2': X_train_encodings['attention_mask'],
+    },
+    y_train.astype(float)
+))
+test_dataset = tf.data.Dataset.from_tensor_slices((
+    {
+        'input_1': X_test_encodings['input_ids'],
+        'input_2': X_test_encodings['attention_mask'],
+    },
+    y_test.astype(float)
+))
+
+# Load the pre-trained BERT model
+bert_model = TFBertModel.from_pretrained('bert-base-uncased', output_hidden_states=True)
+
+
+# Build the transformer-based model
+input_ids = tf.keras.layers.Input(shape=(max_length,), dtype=tf.int32, name='input_1')
+attention_mask = tf.keras.layers.Input(shape=(max_length,), dtype=tf.int32, name='input_2')
+embedding_layer = bert_model(input_ids, attention_mask=attention_mask)[0]
+output_layer = tf.keras.layers.GlobalAveragePooling1D()(embedding_layer)
+output_layer = tf.keras.layers.Dense(1, activation='sigmoid')(output_layer)
+
+model = tf.keras.Model(inputs=[input_ids, attention_mask], outputs=output_layer)
+
+# Compile the model
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+              loss='binary_crossentropy',
+              metrics=['accuracy'])
+
+# Train the model
+model.fit(train_dataset.shuffle(1000).batch(16),
+          epochs=3,
+          batch_size=16,
+          validation_data=test_dataset.shuffle(1000).batch(16))
+
+# Evaluate the model
+loss, accuracy = model.evaluate(test_dataset.batch(16), verbose=0)
+print("Accuracy:", accuracy)
+
+#plot
+plot_model(model, to_file='model.png', show_shapes=True)
