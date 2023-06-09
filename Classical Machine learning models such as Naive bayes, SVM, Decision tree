@@ -1,0 +1,114 @@
+import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import classification_report, accuracy_score
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load the dataset
+data = pd.read_csv('/content/train.csv')  # Replace 'sentiment_data.csv' with your dataset file
+
+# Split the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(data['tweet'], data['label'], test_size=0.2, random_state=42)
+
+# Text vectorization using CountVectorizer
+vectorizer = CountVectorizer()
+X_train_counts = vectorizer.fit_transform(X_train)
+X_test_counts = vectorizer.transform(X_test)
+
+# Transform the word counts to TF-IDF representation
+tfidf_transformer = TfidfTransformer()
+X_train_tfidf = tfidf_transformer.fit_transform(X_train_counts)
+X_test_tfidf = tfidf_transformer.transform(X_test_counts)
+
+# Naive Bayes classifier
+nb_classifier = MultinomialNB()
+nb_classifier.fit(X_train_tfidf, y_train)
+nb_predictions = nb_classifier.predict(X_test_tfidf)
+
+print("Naive Bayes Classifier:")
+print(classification_report(y_test, nb_predictions))
+print("Accuracy:", accuracy_score(y_test, nb_predictions))
+
+# SVM classifier
+svm_classifier = SVC()
+svm_classifier.fit(X_train_tfidf, y_train)
+svm_predictions = svm_classifier.predict(X_test_tfidf)
+
+print("SVM Classifier:")
+print(classification_report(y_test, svm_predictions))
+print("Accuracy:", accuracy_score(y_test, svm_predictions))
+
+# Decision Tree classifier
+dt_classifier = DecisionTreeClassifier()
+dt_classifier.fit(X_train_tfidf, y_train)
+dt_predictions = dt_classifier.predict(X_test_tfidf)
+
+print("Decision Tree Classifier:")
+print(classification_report(y_test, dt_predictions))
+print("Accuracy:", accuracy_score(y_test, dt_predictions))
+
+
+from sklearn.metrics import classification_report
+
+classifiers = ['Naive Bayes', 'SVM', 'Decision Tree']
+reports = [classification_report(y_test, nb_predictions),
+           classification_report(y_test, svm_predictions),
+           classification_report(y_test, dt_predictions)]
+
+# Initialize arrays to store precision, recall, and F1-score values
+precision = np.zeros((len(classifiers), len(set(y_test))), dtype=float)
+recall = np.zeros((len(classifiers), len(set(y_test))), dtype=float)
+f1_score = np.zeros((len(classifiers), len(set(y_test))), dtype=float)
+
+# Parse the classification reports and store the scores
+for i, report in enumerate(reports):
+    report_lines = report.split('\n')[2:-5]
+    for j, line in enumerate(report_lines):
+        line_parts = line.split()
+        if len(line_parts) == 5:
+            precision[i, j] = float(line_parts[1])
+            recall[i, j] = float(line_parts[2])
+            f1_score[i, j] = float(line_parts[3])
+
+# Set up the plot
+fig, ax = plt.subplots(figsize=(12, 6))
+bar_width = 0.2
+index = np.arange(len(classifiers))
+colors = ['#1f77b4', '#ff7f0e', '#2ca02c']
+
+# Plot precision, recall, and F1-score for each class and each classifier
+for i in range(len(set(y_test))):
+    bar_offset = i * bar_width
+    ax.bar(index + bar_offset, precision[:, i], bar_width, label=f'Class {i+1} - Precision', color=colors[i])
+    ax.bar(index + bar_offset + bar_width, recall[:, i], bar_width, label=f'Class {i+1} - Recall', color=colors[i], alpha=0.5)
+    ax.bar(index + bar_offset + 2 * bar_width, f1_score[:, i], bar_width, label=f'Class {i+1} - F1-Score', color=colors[i], alpha=0.8)
+
+# Configure the plot
+ax.set_xlabel('Classifier')
+ax.set_ylabel('Score')
+ax.set_title('Classification Report')
+ax.set_xticks(index + bar_width)
+ax.set_xticklabels(classifiers)
+ax.legend(loc='lower right')
+ax.grid(True)
+
+plt.show()
+
+# Accuracy score visualization
+accuracies = [accuracy_score(y_test, nb_predictions),
+              accuracy_score(y_test, svm_predictions),
+              accuracy_score(y_test, dt_predictions)]
+
+plt.figure(figsize=(8, 4))
+sns.barplot(x=classifiers, y=accuracies)
+plt.xlabel('Classifier')
+plt.ylabel('Accuracy')
+plt.title('Accuracy Score')
+plt.ylim(0, 1)
+plt.grid(True)
+plt.show()
+
